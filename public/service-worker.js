@@ -40,3 +40,23 @@ self.addEventListener("activate", (event) => {
     })
   );
 });
+
+// Fetch
+self.addEventListener("fetch", (event) => {
+  console.log("Service worker fetching");
+  // Check if live is available,  no connection = fail to .catch, match file from cache
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        // copy response
+        const resClone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          //   Add response to cache
+          cache.put(event.request, resClone);
+        });
+        return res;
+      })
+      .catch((error) => caches.match(event.request).then((res) => res))
+    // Catch if offline
+  );
+});
