@@ -1,5 +1,6 @@
 // Cache
-const CACHE_NAME = "v1";
+const CACHE_NAME = "static-cache-v2";
+const DATA_CACHE_NAME = "data-cache-v2";
 const CACHE_FILES = [
   "/",
   "/index.html",
@@ -13,14 +14,11 @@ const CACHE_FILES = [
 self.addEventListener("install", (event) => {
   console.log("Service worker installed");
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => {
-        console.log("service worker Caching Files");
-        cache.addAll(CACHE_FILES);
-      })
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(CACHE_FILES);
+    })
   );
+  self.skipWaiting();
 });
 
 // Activate
@@ -31,7 +29,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
+          if (cache !== CACHE_NAME && cache !== DATA_CACHE_NAME) {
             console.log("Clearing old cache", cache);
             return caches.delete(cache);
           }
@@ -39,24 +37,43 @@ self.addEventListener("activate", (event) => {
       );
     })
   );
+  // If any other service workers are claiming thread
+  self.clients.claim();
 });
 
-// Fetch
+// Fetch;
 self.addEventListener("fetch", (event) => {
-  console.log("Service worker fetching");
+  console.log("Service worker fetching", event.request.url);
   // Check if live is available,  no connection = fail to .catch, match file from cache
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(
+      caches
+        .open(DATA_CACHE_NAME)
+        .then((cache) => {
+          return fetch(event.request)
+            .then((response) => {
+              if (response.status === 200) {
+                cache.put(event.request.url, response.clone());
+              }
+              return response;
+            })
+            .catch((error) => {
+              return cache.match(event.request);
+            });
+        })
+        .catch((error) => console.log(error))
+    );
+    return;
+  }
+
+  // If API request not available, serve static assets
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // copy response
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          //   Add response to cache
-          cache.put(event.request, resClone);
-        });
-        return res;
-      })
-      .catch((error) => caches.match(event.request).then((res) => res))
-    // Catch if offline
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.match(event.request).then(function (response) {
+        return response || fetch(event.request);
+      });
+    })
   );
 });
+
+// TESTER
