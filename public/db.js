@@ -1,11 +1,13 @@
 let db;
 
-const request = window.indexedDB.open("offlineDB", 2);
+const request = window.indexedDB.open("offlineDB", 5);
 // new or updated db
 request.onupgradeneeded = function (e) {
+  console.log("upgrade needed");
   db = request.result;
-  store = db.createObjectStore(["transactionStore"], { autoIncrement: true });
-  index = store.createIndex("transactionName", "transactionName", { unique: false });
+  if (db.objectStoreNames.length === 0) {
+    store = db.createObjectStore("transactionStore", { autoIncrement: true });
+  }
 };
 
 // if error
@@ -13,34 +15,55 @@ request.onerror = function (e) {
   console.log("Error:", e.target);
 };
 
+function handleOnline() {
+  console.log("handleonline");
+  const transaction = db.transaction(["transactionStore"], "readwrite");
+  const store = transaction.objectStore("transactionStore");
+  const getAll = store.getAll();
+
+  getAll.onsuccess = function () {
+    if (getAll.result.length > 0) {
+      fetch("/api/transaction/bulk", {
+        method: "POST",
+        body: JSON.stringify(getAll.result),
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json",
+        },
+      })
+        .then((response) => response.json())
+        .then((res) => {
+          if (res.length !== 0) {
+            const transaction = db.transaction(["transactionStore"], "readwrite");
+            const currentStore = transaction.objectStore("transactionStore");
+            currentStore.clear();
+          }
+        });
+    }
+  };
+}
+
 // success
 request.onsuccess = function (e) {
+  console.log("request-success");
   db = request.result;
-  tx = db.transaction(["transactionStore"], "readwrite");
-  store = tx.objectStore("transactionStore");
-  index = store.index("transactionName");
+  if (navigator.onLine) {
+    console.log("navigator online");
+    handleOnline();
+  }
 
-  db.onerror = function (e) {
-    console.log("ERROR", e.target.errorCode);
-  };
+  // db.onerror = function (e) {
+  //   console.log("ERROR", e.target.errorCode);
+  // };
 };
 
 // save record, (invoked from failed api/transaction)
 const saveRecord = (record) => {
+  console.log("save record function");
   const transaction = db.transaction(["transactionStore"], "readwrite");
   const store = transaction.objectStore("transactionStore");
   store.add(record);
 };
 
-// Offline storage
-function handleOffline(event) {
-  console.log("OFFLINE");
-}
-
-function handleOnline(event) {
-  console.log("ONLINE");
-}
-
 // Events
-window.addEventListener("offline", handleOffline);
 window.addEventListener("online", handleOnline);
