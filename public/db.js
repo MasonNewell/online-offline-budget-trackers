@@ -1,6 +1,6 @@
 let db;
 
-const request = window.indexedDB.open("offlineDB", 5);
+const request = window.indexedDB.open("offlineDB", 6);
 // new or updated db
 request.onupgradeneeded = function (e) {
   console.log("upgrade needed");
@@ -20,7 +20,7 @@ function handleOnline() {
   const transaction = db.transaction(["transactionStore"], "readwrite");
   const store = transaction.objectStore("transactionStore");
   const getAll = store.getAll();
-
+  // console.log("getAll.result", getAll.result);
   getAll.onsuccess = function () {
     if (getAll.result.length > 0) {
       fetch("/api/transaction/bulk", {
